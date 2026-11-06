@@ -73,11 +73,19 @@ function renderPort(s) {
   box.replaceChildren(r); // swapped whole: the list is never laid out empty
 }
 
+// Request handling belongs to this gateway: a missing choice is passthrough.
+// savePrefs restores the saved choice if the write fails.
+function renderRequestMode(s) {
+  $("#requestModeSegs").replaceChildren(segs([["passthrough", t("Passthrough (default)")], ["managed", t("Original handling")]], s.requestMode || "passthrough", (requestMode) =>
+    savePrefs({ ...prefsKeep(prefs), requestMode })));
+}
+
 // renderBareIds: Model ids without the provider (settings.bareModelIDs,
 // love1sbug on X, moving from CLIProxyAPI): the gateway's /v1/models
 // lists each model by its own id as well, gpt-5.6-sol beside
 // codex/gpt-5.6-sol. Posted on its own; off by default.
 function renderBareIds(s) {
+  renderRequestMode(s);
   renderBusyLoad(s); // the row under it
   $("#bareIdsSegs").replaceChildren(segs([[false, t("Off")], [true, t("On")]], !!s.bareModelIDs, (on) =>
     writingPrefs(api("settings/bare-ids", { on })).then((ns) => { prefs = state.settings = ns; renderSettings(); })

@@ -3353,7 +3353,7 @@ var watchEvery = time.Second
 // keepHeldAfter sends nothing, its 429 still a status with its
 // Retry-After. The returned func ends it, and returns once it has.
 func (h *holdWriter) keepQueued() func() {
-	if !h.streams || h.alive == nil || h.alive.proto == provider.Gemini {
+	if !managedRequest(h.ctx) || !h.streams || h.alive == nil || h.alive.proto == provider.Gemini {
 		return func() {}
 	}
 	done, over := make(chan struct{}), make(chan struct{})
@@ -3391,7 +3391,7 @@ func (h *holdWriter) keepQueued() func() {
 // running no scan. The returned func ends the watch, and returns once it
 // has.
 func (h *holdWriter) watch() func() {
-	first := h.firstWait > 0 && h.stop != nil
+	first := managedRequest(h.ctx) && h.firstWait > 0 && h.stop != nil
 	if !first && !h.streams {
 		return func() {}
 	}
@@ -3466,6 +3466,11 @@ func (h *holdWriter) watch() func() {
 // comments only (keepAlive), none of the try, which another account may
 // still answer instead; passed, a comment goes between two lines of it.
 func (h *holdWriter) keepQuiet() {
+	if !managedRequest(h.ctx) && (!h.passing || h.status >= 400) {
+		// Preserve a real HTTP error status while its headers are still
+		// pending. Once a successful stream began, comments are safe.
+		return
+	}
 	if h.slow || h.relooped || h.ended || h.alive == nil || h.alive.proto == provider.Gemini || h.ctx != nil && h.ctx.Err() != nil {
 		return
 	}

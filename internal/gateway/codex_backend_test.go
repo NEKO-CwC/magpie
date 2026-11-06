@@ -27,6 +27,12 @@ import (
 func chatgpt(t *testing.T, h http.HandlerFunc) *httptest.Server {
 	t.Helper()
 	setHome(t, t.TempDir()) // no sign-ins but the test's
+	// Native backend fixtures exercise its existing recovery behavior.
+	s := settings.Load()
+	s.RequestMode = settings.RequestManaged
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
 	forgetCodexLists(t)
 	up := httptest.NewServer(h)
 	t.Cleanup(up.Close)

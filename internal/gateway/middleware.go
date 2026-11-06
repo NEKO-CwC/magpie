@@ -21,6 +21,7 @@ import (
 // search and vision stand-ins) go without them, as their replies are
 // magpie's to read.
 func (s *Server) serveAgent(w http.ResponseWriter, r *http.Request, from provider.Protocol, body []byte) {
+	r = withRequestMode(r)
 	withGatewaySession(w, r)
 	// the agent's own turn, which the user's model for requests masking
 	// would change is for (maskRouteFor)
@@ -39,7 +40,7 @@ func (s *Server) serveAgent(w http.ResponseWriter, r *http.Request, from provide
 	defer recorded()
 	// a conversation going round one tool call is answered here, before
 	// anything of it is asked of a hook, a middleware or a provider
-	if s.stoppedToolLoop(w, r, from, body) {
+	if managedRequest(r.Context()) && s.stoppedToolLoop(w, r, from, body) {
 		return
 	}
 	w, body, hooked := gatewayHooks(w, r, from, body)

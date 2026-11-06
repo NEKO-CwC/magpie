@@ -10,6 +10,7 @@ import (
 
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/routes"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // keyed is a vendor that says which key each request came with, and
@@ -40,6 +41,9 @@ func fresh(t *testing.T) {
 	t.Setenv("USERPROFILE", home) // Windows finds the home there
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	// These fixtures exercise the existing recovery behavior. Request
+	// mode tests explicitly choose passthrough or its empty default.
+	managedFixture(t)
 	restingUntil.Lock()
 	restingUntil.m = map[string]time.Time{}
 	restingUntil.Unlock()
@@ -70,6 +74,15 @@ func fresh(t *testing.T) {
 	remoteRefreshes.Unlock()
 	resetAuthThrottle()
 	forgetRouting()
+}
+
+func managedFixture(t *testing.T) {
+	t.Helper()
+	s := settings.Load()
+	s.RequestMode = settings.RequestManaged
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // forgetRouting clears what routing keeps for the gateway's life — each

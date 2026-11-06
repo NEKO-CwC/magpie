@@ -37,7 +37,7 @@ var Keys = []string{
 	// usage and alerts
 	"currency", "chineseUnits", "usageAlert", "balanceAlert", "resetReminder", "turnDoneAlert", "maskAlert",
 	// network
-	"proxy",
+	"proxy", "requestMode",
 	// privacy
 	"redact", "redactPersonal", "redactKinds", "redactWords", "redactWordsAnyCase", "redactWordsWhole", "redactShape",
 	"noStats", "noUsageStats", "otel",
@@ -68,6 +68,7 @@ var Choices = map[string][]string{
 	"updateEvery":    ints(settings.UpdateEveries),
 	"searchFirst":    {settings.SearchFirstModel, settings.SearchFirstAPI},
 	"replyModel":     settings.ReplyModels,
+	"requestMode":    {settings.RequestPassthrough, settings.RequestManaged},
 }
 
 func ints(v []int) []string {
@@ -164,6 +165,10 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	}
 	var fields map[string]json.RawMessage
 	_ = json.Unmarshal(raw, &fields)
+	// Older pages omit the request mode; only an explicit choice resets it.
+	if _, sent := fields["requestMode"]; !sent {
+		in.RequestMode = cur.RequestMode
+	}
 	// the Settings page sends its own choices; how the agents are
 	// arranged is the Agents page's, and the window's size its own; both stay as they are.
 	// Older pages do not send fonts. An explicit null restores the

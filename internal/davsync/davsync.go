@@ -1173,6 +1173,7 @@ func syncOnce(ctx context.Context, c Config, st *state) error {
 	// were before it, is kept when the write is blind
 	push := func(b backup.Bundle, etag string, were blind) error {
 		b.Created, b.App = time.Now().UTC(), "magpie"
+		b = withoutRequestMode(b)
 		sealed, err := backup.Seal(b, c.Passphrase)
 		if err != nil {
 			return err

@@ -1,5 +1,12 @@
 # Dropdown browser regression
 
+`request-mode.test.cjs` exercises Settings → Network and sharing's request
+handling choice in Chromium and WebKit, all five languages, at 1000 and 390px:
+passthrough by default, keyboard changes, persistence after reload, rollback
+after a failed save, Settings search and narrow layout. The API is faked;
+`ARTIFACT_DIR` retains screenshots and `MAGPIE_REQUEST_MODE_ASSETS` can select
+older assets to verify that the new control is absent there.
+
 `modal-backdrop.test.cjs` checks the modal's computed backdrop filter using
 the real stylesheet and platform marker: Windows desktop windows and panels
 keep the dimming veil without filtering, while browser pages, macOS and Linux

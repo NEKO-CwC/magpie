@@ -22652,10 +22652,10 @@ function dockChoice(s) {
   return s.dock ? "on" : s.dockNever ? "off" : "window";
 }
 
-// prefsKeep is what the settings page sends of s, all of it each time.
+// prefsKeep carries the page's settings with every save.
 function prefsKeep(s) {
   return { theme: s.theme, colorblind: !!s.colorblind, reduceMotion: !!s.reduceMotion, noBird: !!s.noBird, lang: s.lang, tray: s.tray, dock: !!s.dock, dockWindow: !!s.dockWindow, dockNever: !!s.dockNever, lightweight: s.lightweight, keepAwake: !!s.keepAwake, keepAwakeDisplay: !!s.keepAwakeDisplay, noWSLAgents: !!s.noWSLAgents, quitNoAsk: !!s.quitNoAsk, proxy: s.proxy || "",
-    sessionTerminal: s.sessionTerminal || "",
+    sessionTerminal: s.sessionTerminal || "", requestMode: s.requestMode || "",
     uiFont: s.uiFont || null, codeFont: s.codeFont || null,
     otel: s.otel || {},
     trayUsages: s.trayUsages || [],

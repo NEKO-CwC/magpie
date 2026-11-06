@@ -3,9 +3,41 @@
 The gateway is magpie's local LLM endpoint (`127.0.0.1:3425` by default). It
 serves Chat Completions, Responses, Anthropic Messages and Gemini. It finds
 the provider, key or account and model for each request. When the upstream
-doesn't speak the agent's API, the gateway translates. When an upstream
-fails before any of the reply is sent, the gateway moves to the next
-candidate.
+doesn't speak the agent's API, the gateway translates. Failure handling is
+selected in Settings > Network and sharing > Request handling mode.
+
+## Request handling mode
+
+`settings.requestMode` is this computer's choice: `passthrough` (also an
+absent or empty value, the default) or `managed` (Original handling).
+Existing installations without the setting use passthrough too. The
+setting is saved through the ordinary settings API and `magpie settings`,
+and takes effect on new requests without restarting the gateway. Each
+request fixes its mode before middleware runs; changing the setting does
+not change an in-flight request. See [`request_mode.go`](../../internal/gateway/request_mode.go).
+
+Passthrough chooses one available candidate through the existing initial
+routing rules. The gateway does not retry that candidate, try another key,
+account, model or provider after a failure, repair a refused request and
+send it again, or continue a broken reply with another generation. It does
+not infer a context overflow from an estimated prompt size. Same-protocol
+HTTP errors keep their status, body and end-to-end headers. A translated
+error keeps the upstream status, message and code in the client's protocol.
+A stream's upstream error is retained; a stream that breaks ends with a
+network/stream error, never a guessed context overflow or a successful end.
+No HTTP 200 keepalive is sent before the upstream answers, so a late HTTP
+error can still reach the client with its actual status. The client's
+retry policy decides what follows.
+
+Original handling keeps the recovery behavior described elsewhere on this
+page: retries, alternate candidates, request repairs, continuation and
+`tooLongUnsaid` inference. Tests of that behavior opt into `managed`.
+Authentication before sending, protocol conversion, model names, usage
+accounting and explicitly configured middleware still apply in either
+mode. A plugin or remote relay may perform retries inside its own fetch;
+this setting controls magpie's gateway, not that upstream implementation.
+The choice is never uploaded or imported by setup sync; see
+[Sync and backup](sync-backup.md).
 
 This page covers how a request is routed. Plugins that change requests and
 replies are in [Gateway middleware](gateway-middleware.md). Subscriptions

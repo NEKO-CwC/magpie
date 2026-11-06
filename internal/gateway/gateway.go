@@ -2160,6 +2160,8 @@ func estimate(req *Request) int {
 // serve routes one parsed-enough request to its provider.
 func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Protocol, body []byte) {
 	start := time.Now()
+	r = withRequestMode(r)
+	managed := managedRequest(r.Context())
 	// a client's "off" is magpie's none, for every route and check below
 	// that reads the body's effort (plugins#334)
 	body = offAsNone(from, body)
@@ -3298,11 +3300,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// for its allowance running out to be told as that one's error
 		// and once the agent has the stream's headers from an earlier try's
 		// keepalives, for a failure to be told as the stream's error
-		hw := newHoldWriter(w, !last || again < max(lastRetries, rateRetries) || other != nil || kept.sent || autoPicks(c) && repicked < 2 ||
-			patience > 0 && rounds < replanRounds && (waitFrom.IsZero() || time.Since(waitFrom) < patience) || wantWhole)
+		hw := newHoldWriter(w, managed && (!last || again < max(lastRetries, rateRetries) || other != nil || kept.sent || autoPicks(c) && repicked < 2 ||
+			patience > 0 && rounds < replanRounds && (waitFrom.IsZero() || time.Since(waitFrom) < patience) || wantWhole))
 		// a compaction's summary is held to its end, for a cut or an
 		// error halfway to go to the next candidate (#2274)
-		hw.wantWhole = wantWhole
+		hw.wantWhole = managed && wantWhole
 		// Claude's and GPT's reasoning is held for a refusal after it only
 		// while another candidate could answer instead: the last one's
 		// refusal isn't asked again, so holding it only kept a lone relay's
@@ -3331,7 +3333,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		if !last && c.claudeAccount() && slices.ContainsFunc(cands[i+1:], candidate.claudeAccount) {
 			retell, noRetell = tooBigToRetell(from, body)
 		}
-		if handsOver(streams, last || noRetell && len(otherThanClaudeAccounts(cands[i+1:])) == 0, wantWhole, from, refusals) {
+		if managed && handsOver(streams, last || noRetell && len(otherThanClaudeAccounts(cands[i+1:])) == 0, wantWhole, from, refusals) {
 			// reasoning that went through as it came, and a refusal after
 			// it with nothing yet said: the next candidate answers in the
 			// same stream (refusalHandover; yhwangl on X)
@@ -3344,7 +3346,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			report = nil
 		}
 		cacheReportTry(hw, report)
-		if streams && !settings.Load().NoLoopGuard {
+		if managed && streams && !settings.Load().NoLoopGuard {
 			// a reply stuck in a loop is ended, not let run to its limit
 			// (#1359)
 			hw.loop = &loopGuard{}
@@ -3646,7 +3648,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			if ultra && from == provider.Anthropic {
 				ctx = withUltra(ctx)
 			}
-			if !last {
+			if managed && !last {
 				// another candidate is asked if this one can't answer
 				// now: a plugin whose vendor queues the request says so
 				// at once instead of waiting in the queue (FallbackHeader)
@@ -3703,6 +3705,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				// Discord: the requests already waiting for a third ZCode
 				// account waited on once the first two were back)
 				release, inLane, err = s.lanes.take(ctx, c.who(), c.p.LaneLimit(), c.p.QueueLimit, time.Duration(c.p.QueueWait)*time.Second, func() (bool, time.Time) {
+					if !managed {
+						return false, time.Time{}
+					}
 					m, rel, next, ok := s.waitMate(cands, i, isGroup, gaveWay, all)
 					if !ok {
 						return false, next
@@ -3811,14 +3816,14 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		if hw.passing {
 			clientResponseID = call.Usage.ResponseID
 		}
-		if !hw.passing && !hw.refused && modelRetired(hw.code(), hw.errBody()) {
+		if managed && !hw.passing && !hw.refused && modelRetired(hw.code(), hw.errBody()) {
 			// the vendor's list may still name it (OpenCode Zen's
 			// exo-free): it leaves the lists of this provider's models; a
 			// refusal is about the request, whatever it says (#3274)
 			provider.Retire(c.p.ID, c.model)
 		}
 		outgrew := false // a failure that didn't say so was the request's length
-		if !hw.passing && !hw.refused && hw.code() >= 400 {
+		if managed && !hw.passing && !hw.refused && hw.code() >= 400 {
 			if req, err := parse(from, attemptBody); err == nil {
 				if msg, ok := tooLongUnsaid(c.p, c.model, estimate(req), hw.code(), hw.errBody()); ok {
 					// told as an overflow: not asked again, of this one or
@@ -3919,6 +3924,27 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			call.Status, call.Error = canceled(r.Context())
 			try.Status, try.Error, try.Fail = call.Status, call.Error, failCanceled
 			watched.attempt(call, try, c.p.ID, sent, hw, capture)
+			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
+			break
+		}
+		if !managed {
+			// Complete the same attempt, without entering the managed
+			// recovery walk or teaching future requests a fallback.
+			watched.attempt(call, try, c.p.ID, sent, hw, capture)
+			hw.release()
+			if hw.passing {
+				clientResponseID = call.Usage.ResponseID
+			}
+			if call.Status < 400 && call.Error == "" {
+				servedCandidate(c, call.Usage.Input+call.Usage.Output+call.Usage.CacheRead+call.Usage.CacheWrite)
+				noteTrySpeed(c, try, call.Usage.Output, call.Usage.Reasoning, ended)
+				if hit == nil || !hit.Compact {
+					answeredStanding(stuck, c, aff.Turn, call.Usage, standsInFor(c, plannedCs, plannedOrder))
+					forgetOverflow(stuck, c)
+				}
+			} else {
+				try.Fail = failureOf(c, call.Status, []byte(call.Error))
+			}
 			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 			break
 		}
@@ -5348,6 +5374,9 @@ func (s *Server) forward(ctx context.Context, p provider.Provider, to provider.P
 		}
 	}()
 	res, err = s.forwardOnce(ctx, p, to, path, body, in)
+	if !managedRequest(ctx) {
+		return res, err
+	}
 	if err == nil && res.StatusCode >= 400 {
 		// a body over the provider's byte cap: asked again with its
 		// oldest images left out, or said as a 413 (body_cap.go)
@@ -5703,6 +5732,13 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 		return p.Do(s.client, r)
 	}
 	res, err := p.Do(s.client, req)
+	if !managedRequest(ctx) {
+		if err == nil {
+			heardCodexLimits(p, res)
+			noteSignIn(ctx, p.Account, req, res)
+		}
+		return res, err
+	}
 	if err == nil && res.StatusCode >= 400 && provider.OpenCodeURL(req.URL.String()) {
 		logOpenCodeRefusal(p, req, res.StatusCode)
 	}
@@ -6178,6 +6214,10 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	if err != nil {
 		return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
 	}
+	if !managedRequest(r.Context()) && res.StatusCode >= 400 {
+		status, msg := relayRequestError(w, res, u)
+		return status, msg, true
+	}
 	if res.StatusCode == http.StatusBadRequest && (proto == provider.Chat || proto == provider.Gemini) && signaturesReach(p, proto, upstream) {
 		// a signature Google won't take (signatureRefused), one given
 		// before magpie noted whose it was: asked again once without
@@ -6592,7 +6632,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	// a Chat reply asked whole is written once it has ended: whether it
 	// was a void cut at its length (#2972) is told at its end, and the
 	// error said in its place wants the status too
-	wholeHold := proto == provider.Chat && !sse
+	wholeHold := managedRequest(r.Context()) && proto == provider.Chat && !sse
 	if !wholeHold {
 		w.WriteHeader(res.StatusCode)
 	}
@@ -6800,7 +6840,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		n, err := rd.Read(buf)
 		if n > 0 {
 			sniff.write(buf[:n])
-			if proto == provider.Chat && sse && gather == nil && sniff.u.Stop != "" && !sniff.tail.said() {
+			if managedRequest(r.Context()) && proto == provider.Chat && sse && gather == nil && sniff.u.Stop != "" && !sniff.tail.said() {
 				// the reply's end is in this or a later read, and nothing
 				// has been said in it: hold what follows for the void's
 				// verdict (#2972). A reply that has said something is
@@ -6996,7 +7036,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	// a Chat stream of Gemini's OpenAI-compatible API is whole only with
 	// its finish_reason, [DONE] or not (saysItsEnd)
 	unfinished := proto == provider.Chat && sniff.failed == "" && sniff.u.Stop == "" && saysItsEnd(p, proto, upstream)
-	if fin := sniff.tail.finish(); sse && unfinished && fin != "" && (rerr == nil || rerr == io.EOF) && r.Context().Err() == nil {
+	if fin := sniff.tail.finish(); managedRequest(r.Context()) && sse && unfinished && fin != "" && (rerr == nil || rerr == io.EOF) && r.Context().Err() == nil {
 		// only the finish_reason was lost, after the generation was done
 		// (chatTail): the client gets it, and the reply is whole. The
 		// event the upstream began and never ended has no rest coming:
@@ -7033,7 +7073,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			// reading it dies on its JSON before the error is reached
 			dropHalf()
 			w.Write(append(apart(), streamFailure(proto, failed)...))
-			if proto == provider.Chat && rerr != nil && rerr != io.EOF {
+			if managedRequest(r.Context()) && proto == provider.Chat && rerr != nil && rerr != io.EOF {
 				// a Chat stream the upstream severed ends on [DONE] too: a
 				// client that reads to it stops there and says the error it
 				// read, instead of waiting on a connection that only
@@ -7500,6 +7540,9 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			path = "/beta" + path
 		}
 		res, err := s.forward(ctx, p, to, path, p.Prepare(body), in)
+		if !managedRequest(ctx) {
+			return res, to, err
+		}
 		if err != nil || res.StatusCode < 400 {
 			if dropped && err == nil {
 				// it was the key: not sent there again
@@ -8320,6 +8363,9 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 	u.RequestID = requestID(res.Header)
 	if res.StatusCode >= 400 {
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+		if !managedRequest(r.Context()) {
+			return translatedRequestError(w, from, res, b, u)
+		}
 		msg := explained(p, model, res, b)
 		if wrongEndpoint(res.StatusCode, b) {
 			msg += wrongAPINote(p, model, res, b)
@@ -8350,7 +8396,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 	}
 	// a Gemini reply that says nothing is a failure, not a turn's end
 	// (#667)
-	empty := emptyFails(actual)
+	empty := managedRequest(r.Context()) && emptyFails(actual)
 	// calls a model wrote into its text are made calls (textcalls.go)
 	written := func(see func(Event)) (func(Event), func()) {
 		names := textCallNames(request.Tools)
@@ -8372,7 +8418,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 		ended = ended || replyEnds(actual, data, upstreamStop([]byte(data)))
 		return dec(data, see)
 	})
-	if fin := tail.finish(); err == nil && !ended && actual == provider.Chat && fin != "" && saysItsEnd(p, actual, model) {
+	if fin := tail.finish(); managedRequest(r.Context()) && err == nil && !ended && actual == provider.Chat && fin != "" && saysItsEnd(p, actual, model) {
 		// Gemini's OpenAI-compatible API lost only the finish_reason
 		// after its generation was done (chatTail)
 		ended, err = true, dec(string(finishChunk(fin)), see)
@@ -8388,7 +8434,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 	// a failure after it, which rested the account (#3274). Nothing has
 	// reached the client yet, so it is told the refusal, as it would be
 	// with nothing said
-	if col.err != "" && !saidAnything(col.res.Parts) && thinkingNeededRefusal.MatchString(col.err) && s.fits(p.ID, thinkingNeeded(model), actual) {
+	if managedRequest(r.Context()) && col.err != "" && !saidAnything(col.res.Parts) && thinkingNeededRefusal.MatchString(col.err) && s.fits(p.ID, thinkingNeeded(model), actual) {
 		// the refusal of a request sent no thinking, carried in the
 		// stream rather than as a 400 (forwardTranslated asks again for
 		// that one): remembered, and asked once more, thinking
@@ -8427,11 +8473,11 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 		msg := p.Name + ": " + errEndedShort.Error()
 		return writeError(w, from, 502, msg), msg
 	}
-	if (empty || repliesCounted(actual) && uncounted(col.res.Usage)) && !saidAnything(col.res.Parts) && answersNothing(col.res.Stop) {
+	if (empty || managedRequest(r.Context()) && repliesCounted(actual) && uncounted(col.res.Usage)) && !saidAnything(col.res.Parts) && answersNothing(col.res.Stop) {
 		msg := p.Name + ": " + emptyReply
 		return writeError(w, from, 502, msg), msg
 	}
-	if cutVoidAt(actual) && replyCheck(r.Context()) == nil &&
+	if managedRequest(r.Context()) && cutVoidAt(actual) && replyCheck(r.Context()) == nil &&
 		cutVoid(col.res.Stop, !saidAnything(col.res.Parts), col.res.Usage.Output, request.MaxTokens) {
 		// at once, asked again nowhere: a void's budget is spent, and a
 		// second ask at the same max_tokens would mostly spend it twice
@@ -9951,8 +9997,11 @@ func writeErrorSaid(w http.ResponseWriter, proto provider.Protocol, status int, 
 		typ = "overloaded_error"
 	}
 	// a relay busy for a moment, said so Pi asks again (#2372)
-	msg = saysBusy(status, msg)
-	if tooLong(status, msg) {
+	managed := managedResponse(w)
+	if managed {
+		msg = saysBusy(status, msg)
+	}
+	if managed && tooLong(status, msg) {
 		// said the way the client's own API says it, so the agent
 		// compacts the conversation and tries again rather than stopping
 		status, typ, code = 400, "invalid_request_error", "context_length_exceeded"
@@ -9960,7 +10009,10 @@ func writeErrorSaid(w http.ResponseWriter, proto provider.Protocol, status int, 
 			msg = "prompt is too long: " + msg
 		}
 	}
-	if h, held := w.(*holdWriter); status == http.StatusRequestEntityTooLarge && (!held || !h.hold) {
+	if !managed && code == nil && tooLong(status, msg) {
+		code = "context_length_exceeded"
+	}
+	if h, held := w.(*holdWriter); managed && status == http.StatusRequestEntityTooLarge && (!held || !h.hold) {
 		const hint = "This is a request-body byte limit, not the model's context: compact the conversation (/compact in Codex or Claude Code), or start a new one with a short summary; fewer images or smaller tool results also help."
 		if !strings.Contains(msg, hint) {
 			msg += " — " + hint

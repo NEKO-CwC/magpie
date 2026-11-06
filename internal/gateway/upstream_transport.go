@@ -127,7 +127,7 @@ func (t drawsApart) RoundTrip(r *http.Request) (*http.Response, error) {
 		return t.uploads.RoundTrip(r)
 	}
 	res, err := t.any.RoundTrip(r)
-	if err == nil || !lostPing(err) || r.GetBody == nil || r.Context().Err() != nil {
+	if err == nil || !managedRequest(r.Context()) || !lostPing(err) || r.GetBody == nil || r.Context().Err() != nil {
 		return res, err
 	}
 	body, gerr := r.GetBody()
@@ -170,6 +170,9 @@ type replayable struct{ http.RoundTripper }
 // the error says why (errClosedUnsent), and the routing rests nobody for
 // it (failProxy).
 func (t replayable) RoundTrip(req *http.Request) (*http.Response, error) {
+	if !managedRequest(req.Context()) {
+		return t.RoundTripper.RoundTrip(req)
+	}
 	_, marked := req.Header["Idempotency-Key"]
 	if _, ok := req.Header["X-Idempotency-Key"]; ok {
 		marked = true

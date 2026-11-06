@@ -4,6 +4,10 @@
 // works. {name} slots are filled by t(str, vars).
 const I18N = {
   zh: {
+    "Request handling mode": "请求处理模式",
+    "Passthrough (default)": "透传（默认）",
+    "Original handling": "原有处理",
+    "Passthrough keeps upstream errors and leaves retries and fallback to the client. Original handling lets magpie infer errors, retry and switch candidates. Only this computer; not synced": "透传保留上游错误，由客户端决定重试和回落。原有处理允许 magpie 推断错误、重试和切换候选。仅本机，不参与同步",
     "Found by magpie: {url}": "magpie 自动找到：{url}",
     "magpie asked this relay where relays tell a key its balance, and reads it here. If the amount is wrong, put in your own Balance URL and field; magpie looks again each day": "magpie 在中转站常用的余额查询地址问到了这个 key 的余额，就从这里读。数额不对的话，请填上你自己的余额 URL 和字段；magpie 每天会重新找一次",
     "Put this query in the Balance URL and Balance field, to change it": "把这个地址填进余额 URL 和余额字段，方便修改",
@@ -4632,6 +4636,10 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "这份报告已经不在了：magpie 只保留最近 5 份。",
   },
   "zh-TW": {
+    "Request handling mode": "請求處理模式",
+    "Passthrough (default)": "透傳（預設）",
+    "Original handling": "原有處理",
+    "Passthrough keeps upstream errors and leaves retries and fallback to the client. Original handling lets magpie infer errors, retry and switch candidates. Only this computer; not synced": "透傳保留上游錯誤，由用戶端決定重試與回退。原有處理允許 magpie 推斷錯誤、重試與切換候選。僅本機，不參與同步",
     "Found by magpie: {url}": "magpie 自動找到：{url}",
     "magpie asked this relay where relays tell a key its balance, and reads it here. If the amount is wrong, put in your own Balance URL and field; magpie looks again each day": "magpie 在中轉站常用的餘額查詢位址問到了這個 key 的餘額，就從這裡讀。數額不對的話，請填上你自己的餘額 URL 和欄位；magpie 每天會重新找一次",
     "Put this query in the Balance URL and Balance field, to change it": "把這個位址填進餘額 URL 和餘額欄位，方便修改",
@@ -9245,6 +9253,10 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "這份報告已經不在了：magpie 只保留最近 5 份。",
   },
   ja: {
+    "Request handling mode": "リクエスト処理モード",
+    "Passthrough (default)": "透過（既定）",
+    "Original handling": "従来の処理",
+    "Passthrough keeps upstream errors and leaves retries and fallback to the client. Original handling lets magpie infer errors, retry and switch candidates. Only this computer; not synced": "透過モードは上流のエラーを保ち、再試行とフォールバックをクライアントに任せます。従来の処理では magpie がエラーを推定し、再試行や候補の切り替えを行います。このコンピューターのみで使用し、同期しません",
     "Found by magpie: {url}": "magpie が自動で見つけました：{url}",
     "magpie asked this relay where relays tell a key its balance, and reads it here. If the amount is wrong, put in your own Balance URL and field; magpie looks again each day": "magpie はリレーが残高を返す一般的な場所でこのキーの残高を見つけ、ここから読んでいます。金額が違う場合は、残高 URL とフィールドを自分で入力してください。magpie は毎日探し直します",
     "Put this query in the Balance URL and Balance field, to change it": "このクエリを残高 URL と残高フィールドに入れて、変更できるようにします",
@@ -13860,6 +13872,10 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "このレポートはもう残っていません。magpie は最新の 5 件だけを保存します。",
   },
   de: {
+    "Request handling mode": "Anfrageverarbeitung",
+    "Passthrough (default)": "Durchreichen (Standard)",
+    "Original handling": "Bisherige Verarbeitung",
+    "Passthrough keeps upstream errors and leaves retries and fallback to the client. Original handling lets magpie infer errors, retry and switch candidates. Only this computer; not synced": "Durchreichen behält Fehler des Anbieters bei und überlässt Wiederholungen und Ausweichversuche dem Client. Bei der bisherigen Verarbeitung deutet magpie Fehler, wiederholt Anfragen und wechselt Kandidaten. Nur auf diesem Computer; wird nicht synchronisiert",
     "Found by magpie: {url}": "Von magpie gefunden: {url}",
     "magpie asked this relay where relays tell a key its balance, and reads it here. If the amount is wrong, put in your own Balance URL and field; magpie looks again each day": "magpie hat das Guthaben dieses Schlüssels dort gefunden, wo Relays es üblicherweise angeben, und liest es hier. Stimmt der Betrag nicht, trage eigene Guthaben-URL und -Feld ein; magpie sucht jeden Tag neu",
     "Put this query in the Balance URL and Balance field, to change it": "Diese Abfrage in Guthaben-URL und Guthaben-Feld übernehmen, um sie zu ändern",

@@ -502,6 +502,10 @@ type Settings struct {
 	// haiku needed more than 8): from 1 to ClassifyTimeoutMost, 0 for
 	// ClassifyTimeoutDefault. ClassifyWait reads it.
 	ClassifyTimeout int `json:"classifyTimeout,omitempty"`
+	// RequestMode chooses who handles failed generation requests. Empty or
+	// passthrough leaves retries and fallback to the client; managed keeps
+	// magpie's error inference and recovery. This computer's own (KeepOwn).
+	RequestMode string `json:"requestMode,omitempty"`
 	// BusyLoad puts a model whose plugin reports it busier than this
 	// percent behind the others it could go to (plugin.ModelLoad,
 	// axelburks on Discord): from 1 to BusyLoadMost-1, past 100 for a
@@ -1187,6 +1191,15 @@ func (s Settings) ResetLead() time.Duration {
 // plugin's reported load is kept at, so a threshold at it moves nothing.
 const BusyLoadMost = 10000
 
+const (
+	RequestPassthrough = "passthrough"
+	RequestManaged     = "managed"
+)
+
+// ManagedRequests says magpie may infer errors and recover a failed request.
+// An older file with no mode uses passthrough, as a fresh installation does.
+func (s Settings) ManagedRequests() bool { return s.RequestMode == RequestManaged }
+
 // ClassifyTimeoutDefault is the seconds a classifier is given when
 // ClassifyTimeout is 0, and ClassifyTimeoutMost the most it can be set to:
 // the turn waits on it before it goes anywhere, with nothing sent to its
@@ -1383,6 +1396,7 @@ func (s Settings) Compact() int {
 // Discord: usage turned off on a Mac came back from a Windows box that
 // shows it; Lullaby: sharing turned on at home came on at work).
 func (s *Settings) KeepOwn(cur Settings) {
+	s.RequestMode = cur.RequestMode
 	s.GatewayConversations = cur.GatewayConversations
 	s.SessionReads = cur.SessionReads
 	s.UIFont, s.CodeFont = cur.UIFont, cur.CodeFont
@@ -2121,6 +2135,9 @@ func saveOwn(s Settings, recording, reads bool) error {
 	}
 	if s.BusyLoad < 0 || s.BusyLoad >= BusyLoadMost {
 		return fmt.Errorf("busy models go last over a load from 1 to %d%%, or 0 for off, not %d", BusyLoadMost-1, s.BusyLoad)
+	}
+	if s.RequestMode != "" && s.RequestMode != RequestPassthrough && s.RequestMode != RequestManaged {
+		return fmt.Errorf("request mode must be %q or %q, not %q", RequestPassthrough, RequestManaged, s.RequestMode)
 	}
 	if s.UsageAlert < 0 || s.UsageAlert > 100 {
 		return fmt.Errorf("a usage alert is at a percentage from 1 to 100, or 0 for off, not %d", s.UsageAlert)

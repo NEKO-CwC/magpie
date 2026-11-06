@@ -409,6 +409,10 @@
     <div class="row-head"><span class="label" data-t>Gateway</span></div>
     <div class="list prefs" id="portList"></div>
     <div class="list prefs">
+      <div class="row pref" id="requestModeRow">
+        <div class="who"><div class="name" data-t>Request handling mode</div><div class="sub" data-t>Passthrough keeps upstream errors and leaves retries and fallback to the client. Original handling lets magpie infer errors, retry and switch candidates. Only this computer; not synced</div></div>
+        <div id="requestModeSegs"></div>
+      </div>
       <div class="row pref" id="bareIdsRow">
         <div class="who"><div class="name" data-t>Model ids without the provider</div><div class="sub" data-t>The gateway’s model list also names each model by its own id, as gpt-5.6-sol beside codex/gpt-5.6-sol, for apps moved from another proxy. One that several providers serve goes to them in the Providers order</div></div>
         <div id="bareIdsSegs"></div>

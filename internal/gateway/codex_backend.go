@@ -76,6 +76,7 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "magpie serves a WebSocket on "+CodexPath+"/responses alone", http.StatusUpgradeRequired)
 		return
 	}
+	r = withRequestMode(r)
 	// the pool's accounts and their model lists say they are this Codex, or
 	// newer: the backend serves a model only to a client that knows it
 	provider.SawCodexClient(r.Header)
@@ -300,7 +301,7 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 		defer recorded()
 		// and the tool loop it may be stuck in spends that sign-in's
 		// allowance as it would a magpie model's
-		if s.stoppedToolLoop(w, r, provider.Responses, body) {
+		if managedRequest(r.Context()) && s.stoppedToolLoop(w, r, provider.Responses, body) {
 			return
 		}
 		// Codex's own sign-in: the request hooks, not the middleware
@@ -948,6 +949,8 @@ func (s *Server) codexUpstream(w http.ResponseWriter, r *http.Request, rest stri
 // Codex's own sign-in, when on isn't nil (compactOn).
 func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest string, body []byte, on *provider.Provider) {
 	start := time.Now()
+	r = withRequestMode(r)
+	managed := managedRequest(r.Context())
 	usage.Saw(agentOf(r))
 	// Codex's own turns come here from the mux, not through serve: the
 	// row written below sums this call's tries in its own context (#4456)
@@ -1006,7 +1009,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 	// again of it, as the accounts loop asks its last account, the same
 	// bytes with the same sign-in, and then of the subscription's
 	// fallbacks; nobody rests for it (夜松云 on Discord)
-	overload := r.Method == http.MethodPost && rest == "/responses" && base == provider.CodexBase && on == nil
+	overload := managed && r.Method == http.MethodPost && rest == "/responses" && base == provider.CodexBase && on == nil
 	streams := streamOf(body)
 	kept := &keptAlive{proto: provider.Responses, told: start, streams: streams}
 	busyAgain := 0     // times the turn was asked again for an overload
@@ -1178,7 +1181,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 	var readErr, writeErr error
 	var passed int64
 	relayedAcct := "" // magpie's ChatGPT account the turn went out on, if any
-	if rest == "/responses" && base != codexAPIBase {
+	if managed && rest == "/responses" && base != codexAPIBase {
 		// the account goes on its credits, its week used up: a reset it
 		// spends by itself when the week runs out goes first
 		// (resetBeforeCredits)
@@ -1252,7 +1255,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 					}
 					continue
 				}
-				if rest == "/responses" {
+				if managed && rest == "/responses" {
 					msg = codexUnreached(modelOf(body), err)
 				}
 				failWith(502, msg)
@@ -1263,6 +1266,9 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 				// one of magpie's accounts: a revoked sign-in shows on its
 				// row, to sign in again (#1793)
 				noteSignIn(ctx, on.Account, req, res)
+			}
+			if !managed {
+				break
 			}
 			if !creditsAsked && rest == "/responses" && base != codexAPIBase && res.StatusCode == http.StatusTooManyRequests && relayOnCredits(on) {
 				// the account holds credits and was refused as out of its
@@ -1357,15 +1363,17 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 			}
 			// a web page or nothing at all, served 200, is the 502 it stands
 			// for (#1012)
-			res = notAnAPIReply(res, "OpenAI: ")
-			if base != codexAPIBase {
+			if managed {
+				res = notAnAPIReply(res, "OpenAI: ")
+			}
+			if managed && base != codexAPIBase {
 				// still closed on after that: Codex is told what may help,
 				// at the 503 it asks again for (#1628)
 				res = codexDropped(res, sent)
 			}
 		}
 		defer res.Body.Close()
-		if base == codexAPIBase && res.StatusCode == http.StatusUnauthorized {
+		if managed && base == codexAPIBase && res.StatusCode == http.StatusUnauthorized {
 			// Codex signed in with an API key OpenAI refuses — often one a
 			// relay issued, left in ~/.codex/auth.json — and one of Codex's own
 			// models was picked, which goes out with Codex's own sign-in
@@ -1377,7 +1385,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 			end(res.StatusCode, res.Status, 0, 0)
 			return
 		}
-		if (rest == "/responses" || rest == "/responses/compact") && res.StatusCode >= 400 {
+		if managed && (rest == "/responses" || rest == "/responses/compact") && res.StatusCode >= 400 {
 			msg, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 			res.Body = io.NopCloser(bytes.NewReader(msg))
 			if overload && codexBusy(res.StatusCode, msg) && s.codexFallsBack(modelOf(body), body) {

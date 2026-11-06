@@ -413,6 +413,10 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 	sw := newSSEWriter(w)
 	enc := encoder(from, sw, request, u)
 	cont := &continuation{mode: prefillHow(p, to, model)}
+	managed := managedRequest(r.Context())
+	if !managed {
+		cont.mode = ""
+	}
 	if !s.fits(p.ID, prefillRefused(model), to) {
 		// the model turned a prefill away before (prefill.go, #1447)
 		cont.mode = ""
@@ -538,12 +542,15 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 		if err == nil {
 			u.RequestID = requestID(res.Header)
 			summaryUpstream = actual == provider.Responses || actual == provider.Gemini || actual == provider.CodeAssist
-			empty, counts = emptyFails(actual), repliesCounted(actual)
-			voids = cutVoidAt(actual)
+			empty, counts = managed && emptyFails(actual), managed && repliesCounted(actual)
+			voids = managed && cutVoidAt(actual)
 		}
 		if err == nil && res.StatusCode >= 400 {
 			b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 			res.Body.Close()
+			if !managed {
+				return translatedRequestError(w, from, res, b, u)
+			}
 			failed, failedStatus = explained(p, model, res, b), res.StatusCode
 			if cont.resume && refusesPrefill(res.StatusCode, b) {
 				// a model that takes no prefill (forwardTranslated
@@ -643,7 +650,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 					// whole would say completed it never said. A Gemini
 					// one is told by its finishReason (geminiEnds, #1643)
 					serr = errEndedShort
-					if fin := tail.finish(); actual == provider.Chat && fin != "" {
+					if fin := tail.finish(); managed && actual == provider.Chat && fin != "" {
 						// Gemini's OpenAI-compatible API lost only the
 						// finish_reason after its generation was done
 						u.add(Usage{Stop: fin})
@@ -718,7 +725,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 		// an error the client already has ends the reply: nothing of it
 		// goes on after it (a group member's mid-reply error fails the
 		// try at once, for the group's next member, #733)
-		if errSent || !cont.again(failedStatus, failedCode, again, r.Context()) {
+		if !managed || errSent || !cont.again(failedStatus, failedCode, again, r.Context()) {
 			if held != nil {
 				// what was held goes as the text it is, as it used to;
 				// a reply that goes on reads it again instead

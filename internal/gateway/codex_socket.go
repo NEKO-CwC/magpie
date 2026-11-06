@@ -148,6 +148,9 @@ func (t codexSocket) RoundTrip(req *http.Request) (*http.Response, error) {
 		return t.next.RoundTrip(req)
 	}
 	res, err := t.socket(req, msg)
+	if !managedRequest(req.Context()) {
+		return res, err
+	}
 	if errors.Is(err, errCodexSocketFallBack) {
 		return t.next.RoundTrip(req)
 	}
@@ -285,6 +288,12 @@ func (t codexSocket) socket(req *http.Request, msg []byte) (*http.Response, erro
 		if req.Context().Err() != nil {
 			return nil, req.Context().Err()
 		}
+		if !managedRequest(req.Context()) {
+			if hs != nil && hs.StatusCode >= 400 {
+				return hs, nil
+			}
+			return nil, err
+		}
 		switch {
 		case hs == nil:
 			shunCodexSocket(u.Host, err.Error())
@@ -299,6 +308,9 @@ func (t codexSocket) socket(req *http.Request, msg []byte) (*http.Response, erro
 	if !stopped {
 		c.CloseNow()
 		cancel()
+		if !managedRequest(req.Context()) {
+			return nil, fmt.Errorf("codex: WebSocket connect timeout: %w", context.DeadlineExceeded)
+		}
 		return nil, errCodexSocketFallBack
 	}
 	c.SetReadLimit(-1)
@@ -307,6 +319,9 @@ func (t codexSocket) socket(req *http.Request, msg []byte) (*http.Response, erro
 		cancel()
 		if req.Context().Err() != nil {
 			return nil, req.Context().Err()
+		}
+		if !managedRequest(req.Context()) {
+			return nil, err
 		}
 		return nil, codexSocketEnded(u.Host, len(msg), err)
 	}
@@ -328,6 +343,9 @@ func (t codexSocket) socket(req *http.Request, msg []byte) (*http.Response, erro
 			body.Close()
 			if req.Context().Err() != nil {
 				return nil, req.Context().Err()
+			}
+			if !managedRequest(req.Context()) {
+				return nil, err
 			}
 			// nothing of the reply has been handed on yet
 			return nil, codexSocketEnded(u.Host, len(msg), err)
@@ -393,7 +411,7 @@ func codexSocketEnded(host string, size int, err error) error {
 // instead; neither for one the stream carries on with.
 func codexSocketError(req *http.Request, header http.Header, frame []byte) (*http.Response, bool) {
 	code := gjson.GetBytes(frame, "error.code").String()
-	if code == "websocket_connection_limit_reached" {
+	if code == "websocket_connection_limit_reached" && managedRequest(req.Context()) {
 		return nil, true
 	}
 	status := int(gjson.GetBytes(frame, "status").Int())

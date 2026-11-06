@@ -3828,6 +3828,10 @@ input.words.compact-num { flex: none; width: 76px; font-variant-numeric: tabular
 #busyLoadRow .who { flex: 1 1 220px; }
 #busyLoadSegs { margin-left: auto; max-width: 100%; }
 #busyLoadSegs > .segs { max-width: 100%; flex-wrap: wrap; }
+#requestModeRow { flex-wrap: wrap; row-gap: 8px; }
+#requestModeRow .who { flex: 1 1 220px; }
+#requestModeSegs { margin-left: auto; max-width: 100%; }
+#requestModeSegs > .segs { max-width: 100%; flex-wrap: wrap; }
 /* the address a refused allow list would shut out, added in one click */
 .row.pref.rule-row .who .allow-fix { display: block; max-width: 100%; margin: 4px 0 0 -7px; overflow: hidden; text-overflow: ellipsis; color: var(--accent); }
 .row.pref.cors-origin .name { white-space: normal; overflow-wrap: anywhere; }

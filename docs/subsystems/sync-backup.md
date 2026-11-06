@@ -47,6 +47,15 @@ session resumes in (`SessionTerminal`) and what the menu bar shows. Launch at
 login is the system's own setting (`internal/autostart`) and the listen
 address is `MAGPIE_ADDR`, so neither is in a bundle.
 
+The gateway's `requestMode` is also this computer's own: incoming syncs,
+restores and undo keep the local choice, and changing it alone does not
+trigger a sync. Unlike own fields merely excluded from change hashes, this
+field is removed from the settings object before every sync upload is
+encrypted, including an explicit Upload and a merged server bundle. It is
+therefore absent from WebDAV, S3 and GitHub payloads even when other
+settings are uploaded. Local backup files may carry it, but restoring one
+still preserves the destination computer's mode.
+
 The Usage page's clears (`usageCleared`, see
 [gateway sessions](gateway-sessions.md)) are a preference, not a computer's
 own, so they ride the settings part: a model cleared on one computer is

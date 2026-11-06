@@ -25,6 +25,7 @@ func twoProviders(t *testing.T, plan, spare *fake) {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	managedFixture(t)
 	restingUntil.Lock()
 	restingUntil.m = map[string]time.Time{}
 	restingUntil.Unlock()
@@ -136,6 +137,7 @@ func (b *byKey) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func TestSeveralKeysOnTakeOverFromEachOther(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	managedFixture(t)
 	restingUntil.Lock()
 	restingUntil.m = map[string]time.Time{}
 	restingUntil.Unlock()
@@ -176,6 +178,7 @@ func TestSeveralKeysOnTakeOverFromEachOther(t *testing.T) {
 func TestModelNotInPlanRestsTheModelNotTheKey(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	managedFixture(t)
 	restingUntil.Lock()
 	restingUntil.m, restingUntil.note = map[string]time.Time{}, map[string]Rest{}
 	restingUntil.Unlock()
@@ -310,6 +313,7 @@ func TestSubscriptionAccountsTakeOver(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	managedFixture(t)
 	restingUntil.Lock()
 	restingUntil.m = map[string]time.Time{}
 	restingUntil.Unlock()
@@ -378,6 +382,7 @@ func TestClaudeAccountsTakeOver(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	managedFixture(t)
 	far := time.Now().Add(24 * time.Hour).UnixMilli()
 	oauth := func(tok string) map[string]any {
 		return map[string]any{"claudeAiOauth": map[string]any{"accessToken": tok, "refreshToken": "r-" + tok, "expiresAt": far, "subscriptionType": "max"}}
@@ -457,6 +462,7 @@ done
 func TestKeysMadeForOneProtocol(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	managedFixture(t)
 	restingUntil.Lock()
 	restingUntil.m = map[string]time.Time{}
 	restingUntil.Unlock()

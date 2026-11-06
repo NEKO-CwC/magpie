@@ -188,6 +188,7 @@ func Upload(ctx context.Context) error {
 		}
 		b := local
 		b.Created, b.App = time.Now().UTC(), "magpie"
+		b = withoutRequestMode(b)
 		sealed, err := backup.Seal(b, c.Passphrase)
 		if err != nil {
 			return err
